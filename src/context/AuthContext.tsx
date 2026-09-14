@@ -20,8 +20,15 @@ interface AuthContextType {
   isAuthModalOpen: boolean;
   openAuthModal: () => void;
   closeAuthModal: () => void;
-  loginWithGoogle: (customEmail?: string, customName?: string, role?: UserRole) => Promise<void>;
-  signInWithGooglePopup: () => Promise<void>;
+  adminPasscode: string;
+  setAdminPasscode: (code: string) => void;
+  loginWithGoogle: (
+    customEmail?: string,
+    customName?: string,
+    role?: UserRole,
+    options?: { adminPasscode?: string; isVerifiedByOAuth?: boolean }
+  ) => Promise<{ success: boolean; error?: string }>;
+  signInWithGooglePopup: () => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   switchRole: (role: UserRole) => void;
   updateUserRole: (userId: string, newRole: UserRole) => void;
@@ -180,18 +187,25 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem('taallam_user_v2');
+      // Clear previous auto-seeded storage keys
+      localStorage.removeItem('taallam_user_v2');
+      localStorage.removeItem('taallam_user');
+
+      // Only restore session if the user explicitly signed in in this active session
+      const saved = sessionStorage.getItem('taallam_active_user_v3');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.email === SUPER_ADMIN_EMAIL) {
-          parsed.isSuperAdmin = true;
-          parsed.role = 'admin';
+        if (parsed && parsed.email) {
+          if (parsed.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+            parsed.isSuperAdmin = true;
+            parsed.role = 'admin';
+          }
+          return parsed;
         }
-        return parsed;
       }
-      return DEFAULT_SUPER_ADMIN;
+      return null;
     } catch {
-      return DEFAULT_SUPER_ADMIN;
+      return null;
     }
   });
 
@@ -251,6 +265,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
+  // Admin security passcode for protecting Mohamed Maged's super admin account
+  const DEFAULT_ADMIN_PASSCODE = 'Admin@2026';
+  const [adminPasscode, setAdminPasscodeState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('taallam_admin_passcode_v2') || DEFAULT_ADMIN_PASSCODE;
+    } catch {
+      return DEFAULT_ADMIN_PASSCODE;
+    }
+  });
+
+  const setAdminPasscode = (code: string) => {
+    setAdminPasscodeState(code);
+    try {
+      localStorage.setItem('taallam_admin_passcode_v2', code);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Sync users & requests to localStorage
   useEffect(() => {
     localStorage.setItem('taallam_platform_users_v2', JSON.stringify(registeredUsers));
@@ -260,12 +293,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.setItem('taallam_role_requests_v2', JSON.stringify(roleRequests));
   }, [roleRequests]);
 
-  // Sync state to local storage
+  // Sync active user to sessionStorage only
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('taallam_user_v2', JSON.stringify(user));
-    } else {
+    try {
+      if (user) {
+        sessionStorage.setItem('taallam_active_user_v3', JSON.stringify(user));
+      } else {
+        sessionStorage.removeItem('taallam_active_user_v3');
+      }
       localStorage.removeItem('taallam_user_v2');
+      localStorage.removeItem('taallam_user');
+    } catch {
+      // ignore
     }
   }, [user]);
 
@@ -298,27 +337,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const closeAuthModal = () => setIsAuthModalOpen(false);
 
   const isSuperAdmin = Boolean(
-    user?.email === SUPER_ADMIN_EMAIL || user?.isSuperAdmin || (user?.email?.toLowerCase() === 'mohamedmaged3g@gmail.com')
+    user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() || user?.isSuperAdmin
   );
 
   const loginWithGoogle = async (
-    customEmail = 'mohamedmaged3g@gmail.com',
-    customName = 'محمد ماجد',
-    role: UserRole = 'student'
-  ) => {
-    const isTargetSuperAdmin = customEmail.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
-    const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(customEmail)}`;
+    customEmail = 'student@example.com',
+    customName = 'طالب جديد',
+    role: UserRole = 'student',
+    options?: { adminPasscode?: string; isVerifiedByOAuth?: boolean }
+  ): Promise<{ success: boolean; error?: string }> => {
+    const trimmedEmail = customEmail.trim().toLowerCase();
+    const isTargetSuperAdmin = trimmedEmail === SUPER_ADMIN_EMAIL.toLowerCase();
+
+    // Security Check: Super Admin impersonation guard
+    if (isTargetSuperAdmin) {
+      const isOAuthVerified = options?.isVerifiedByOAuth === true;
+      const isPasscodeValid = options?.adminPasscode && options.adminPasscode.trim() === adminPasscode.trim();
+
+      if (!isOAuthVerified && !isPasscodeValid) {
+        return {
+          success: false,
+          error: 'حساب المدير العام محمي ومخصص فقط للمالك (الأستاذ محمد ماجد). يرجى إدخال رمز الأمان السري الصحيح أو تسجيل الدخول عبر نافذة Google الرسمية المعتمدة.',
+        };
+      }
+    }
+
+    // Role safety: non-admin users cannot claim 'admin' role
+    let finalRole: UserRole = role;
+    if (!isTargetSuperAdmin && finalRole === 'admin') {
+      finalRole = 'student';
+    }
+    if (isTargetSuperAdmin) {
+      finalRole = 'admin';
+    }
+
+    const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(trimmedEmail)}`;
     
     // Check if user already exists in registeredUsers
-    const existing = registeredUsers.find(u => u.email.toLowerCase() === customEmail.toLowerCase());
-    const finalRole: UserRole = isTargetSuperAdmin ? 'admin' : (existing?.role || role);
+    const existing = registeredUsers.find(u => u.email.toLowerCase() === trimmedEmail);
 
     const newUser: User = {
-      id: existing?.id || `usr-${Date.now()}`,
-      name: existing?.name || customName,
-      email: customEmail,
+      id: existing?.id || (isTargetSuperAdmin ? DEFAULT_SUPER_ADMIN.id : `usr-${Date.now()}`),
+      name: isTargetSuperAdmin ? (existing?.name || 'محمد ماجد') : (customName.trim() || existing?.name || trimmedEmail.split('@')[0]),
+      email: trimmedEmail,
       avatar: isTargetSuperAdmin ? DEFAULT_SUPER_ADMIN.avatar : (existing?.avatar || avatarUrl),
-      role: finalRole,
+      role: isTargetSuperAdmin ? 'admin' : (existing?.role || finalRole),
       isSuperAdmin: isTargetSuperAdmin,
       xp: existing?.xp || 500,
       streakDays: existing?.streakDays || 1,
@@ -329,13 +392,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       certificates: existing?.certificates || [],
       headline: isTargetSuperAdmin
         ? 'المدير العام والمسؤول الرئيسي عن منصة تعلّم'
-        : (finalRole === 'instructor' ? 'معلّم ومصمم دورات تكنولوجية' : (finalRole === 'admin' ? 'مدير المنصة ومشرف المجتمع' : 'طالب متخصص في التقنية ولغات البرمجة')),
+        : (finalRole === 'instructor' ? 'معلّم ومصمم دورات تكنولوجية' : 'طالب متخصص في التقنية ولغات البرمجة'),
       createdAt: existing?.createdAt || new Date().toISOString(),
     };
 
     // Update registered users list
     setRegisteredUsers(prev => {
-      const idx = prev.findIndex(u => u.email.toLowerCase() === customEmail.toLowerCase());
+      const idx = prev.findIndex(u => u.email.toLowerCase() === trimmedEmail);
       if (idx >= 0) {
         const copy = [...prev];
         copy[idx] = { ...copy[idx], ...newUser };
@@ -352,23 +415,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       spread: 70,
       origin: { y: 0.6 },
     });
+
+    return { success: true };
   };
 
-  const signInWithGooglePopup = async () => {
+  const signInWithGooglePopup = async (): Promise<{ success: boolean; error?: string }> => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const fbUser = result.user;
       if (fbUser && fbUser.email) {
-        await loginWithGoogle(
+        const isTargetSuperAdmin = fbUser.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+        return await loginWithGoogle(
           fbUser.email, 
           fbUser.displayName || fbUser.email.split('@')[0], 
-          fbUser.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin' : 'student'
+          isTargetSuperAdmin ? 'admin' : 'student',
+          { isVerifiedByOAuth: true }
         );
       }
-    } catch (error) {
-      console.warn('Firebase popup closed or not fully configured, fallback to direct email login:', error);
-      // If popup was closed or network restricted, fallback gracefully
-      await loginWithGoogle('mohamedmaged3g@gmail.com', 'محمد ماجد', 'admin');
+      return { success: false, error: 'لم يتم العثور على بريد إلكتروني في حساب Google' };
+    } catch (error: any) {
+      console.warn('Firebase popup closed or not configured:', error);
+      if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+        return { success: false, error: 'تم إلغاء نافذة تسجيل الدخول' };
+      }
+      return {
+        success: false,
+        error: error?.message || 'تعذر تسجيل الدخول بنافذة Google. إذا كنت تستخدم متصفحاً يقيد النوافذ، يمكنك الدخول برمز الأمان المخصص.',
+      };
     }
   };
 
@@ -377,6 +450,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await firebaseSignOut(auth);
     } catch (e) {
       console.error(e);
+    }
+    try {
+      sessionStorage.removeItem('taallam_active_user_v3');
+      localStorage.removeItem('taallam_user_v2');
+      localStorage.removeItem('taallam_user');
+    } catch {
+      // ignore
     }
     setUser(null);
   };
@@ -962,6 +1042,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isAuthModalOpen,
         openAuthModal,
         closeAuthModal,
+        adminPasscode,
+        setAdminPasscode,
         loginWithGoogle,
         signInWithGooglePopup,
         logout,

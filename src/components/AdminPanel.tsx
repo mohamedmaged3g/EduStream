@@ -18,7 +18,11 @@ import {
   Filter,
   Sparkles,
   ArrowRight,
-  Mail
+  Mail,
+  KeyRound,
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -28,18 +32,58 @@ interface AdminPanelProps {
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToCatalog }) => {
   const { 
     user, 
+    isSuperAdmin,
     registeredUsers, 
     roleRequests, 
     updateUserRole, 
     approveRoleRequest, 
     rejectRoleRequest, 
-    deletePlatformUser 
+    deletePlatformUser,
+    openAuthModal,
+    adminPasscode,
+    setAdminPasscode
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'requests' | 'users'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'security'>('requests');
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // Security passcode editor state
+  const [newPasscode, setNewPasscode] = useState('');
+  const [showPasscode, setShowPasscode] = useState(false);
+
+  if (!isSuperAdmin) {
+    return (
+      <div className="max-w-md mx-auto py-16 px-4 text-center space-y-6">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center shadow-inner">
+          <Crown className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            لوحة المدير العام للمنصة
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            هذه المنطقة مخصصة حصرياً للمدير العام والمسؤول الرئيسي (<span className="font-mono text-rose-600">mohamedmaged3g@gmail.com</span>). يرجى تسجيل الدخول بحساب المدير للمتابعة.
+          </p>
+        </div>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={onBackToCatalog}
+            className="px-5 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-colors"
+          >
+            العودة للكتالوج
+          </button>
+          <button
+            onClick={openAuthModal}
+            className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors"
+          >
+            تسجيل الدخول كمدير
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const showNotification = (msg: string) => {
     setFeedbackMessage(msg);
@@ -148,6 +192,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToCatalog }) => {
         >
           <Users className="w-4 h-4" />
           <span>إدارة حسابات المستخدمين والصلاحيات ({registeredUsers.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'security'
+              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+          }`}
+        >
+          <Lock className="w-4 h-4" />
+          <span>أمان حساب المدير وكلمة المرور</span>
         </button>
       </div>
 
@@ -403,6 +459,132 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToCatalog }) => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: Security & Passcode Settings */}
+      {activeTab === 'security' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="flex items-start justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-700">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900/60">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>بروتوكول حماية هوية المالك</span>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                  أمان حساب المدير العام والتحكم في رمز الدخول
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed">
+                  تم تأمين حسابك بشكل كامل لمنع أي مستخدم أو زائر آخر من الدخول كمدير أو انتحال هويتك، حتى لو كان يعرف عنوان بريدك الإلكتروني.
+                </p>
+              </div>
+
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 shadow-inner">
+                <KeyRound className="w-6 h-6" />
+              </div>
+            </div>
+
+            {/* Security Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 space-y-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                  البريد الإلكتروني المعتمد للمدير العام:
+                </div>
+                <div className="text-sm font-bold font-mono text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                  <span>mohamedmaged3g@gmail.com</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                    موثق ومحمي
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  هذا البريد هو الوحيد المخول بامتلاك الصلاحيات العليا وإدارة المعلمين والطلاب.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 space-y-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                  رمز الأمان السري الحالي (Admin Passcode):
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-base font-mono font-black text-slate-800 dark:text-slate-100 tracking-wider">
+                    {showPasscode ? adminPasscode : '••••••••••••'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPasscode(!showPasscode)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    {showPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  استخدم هذا الرمز للدخول السريع إذا لم تكن مسجلاً في متصفحك بحساب Google.
+                </p>
+              </div>
+            </div>
+
+            {/* Change Passcode Form */}
+            <div className="p-5 rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Lock className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                <span>تغيير رمز الأمان السري للمدير</span>
+              </h3>
+              
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  placeholder="أدخل رمز أمان سري جديد (مثال: Maged#2026!)"
+                  value={newPasscode}
+                  onChange={e => setNewPasscode(e.target.value)}
+                  className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newPasscode.trim() || newPasscode.trim().length < 4) {
+                      showNotification('يجب أن يتكون رمز الأمان من 4 أحرف أو أرقام على الأقل');
+                      return;
+                    }
+                    setAdminPasscode(newPasscode.trim());
+                    setNewPasscode('');
+                    showNotification('تم تحديث رمز أمان المدير العام بنجاح!');
+                  }}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2 shrink-0"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>حفظ الرمز الجديد</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Security Rules Clarification */}
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                كيف يحميك النظام من دخول أي شخص آخر كمدير؟
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400">
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                  <div className="font-bold text-slate-800 dark:text-slate-200">1. لا دخول افتراضي بدون طلب</div>
+                  <p className="text-[11px] leading-relaxed">
+                    أي زائر يفتح الرابط الآن يبدأ كزائر غير مسجل، ولا يملك أي صلاحيات إلا بعد تسجيل حسابه الشخصي.
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                  <div className="font-bold text-slate-800 dark:text-slate-200">2. منع انتحال البريد</div>
+                  <p className="text-[11px] leading-relaxed">
+                    إذا حاول أي شخص كتابة بريدك في خانة دخول الطلاب، يرفض النظام ذلك ويطالبه برمز الأمان السري فوراً.
+                  </p>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                  <div className="font-bold text-slate-800 dark:text-slate-200">3. توثيق Google الرسمي</div>
+                  <p className="text-[11px] leading-relaxed">
+                    عند تسجيل الدخول بـ Google، تفتح نافذة Google الرسمية للتحقق من كلمة مرور حسابك، ولا يمكن لأحد غيرك الدخول بها.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

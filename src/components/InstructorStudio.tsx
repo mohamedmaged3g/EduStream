@@ -54,7 +54,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   onCourseCreated,
   onOpenMessages,
 }) => {
-  const { user, courses, createNewCourse, deleteCourse, clearAllCourses, requestInstructorUpgrade, roleRequests } = useAuth();
+  const { user, courses, createNewCourse, deleteCourse, clearAllCourses, requestInstructorUpgrade, roleRequests, openAuthModal } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
   const [activeStudioTab, setActiveStudioTab] = useState<'courses' | 'quick_upload' | 'exam_builder'>('courses');
   const [upgradeReason, setUpgradeReason] = useState('');
@@ -362,8 +362,34 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
     onCourseCreated(newCourse);
   };
 
+  // If visitor is not logged in at all, prompt them to sign in
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto py-16 px-4 text-center space-y-6">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-inner">
+          <Presentation className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+            استوديو المعلمين وإدارة الدورات
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            يرجى تسجيل الدخول بحسابك أولاً للوصول إلى أدوات رفع الدروس وتصميم الاختبارات وإدارة الطلاب.
+          </p>
+        </div>
+        <button
+          onClick={openAuthModal}
+          className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-md transition-all inline-flex items-center gap-2"
+        >
+          <Lock className="w-4 h-4" />
+          <span>تسجيل الدخول بحسابك</span>
+        </button>
+      </div>
+    );
+  }
+
   // If user is logged in as a student (not instructor or admin or super admin), show an upgrade request panel
-  if (user && !isInstructorOrAdmin) {
+  if (!isInstructorOrAdmin) {
     return (
       <div className="max-w-3xl mx-auto py-12 px-4 space-y-8">
         <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 text-center shadow-lg space-y-6">

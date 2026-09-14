@@ -26,9 +26,32 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onSelectCourse,
   onViewCertificate,
 }) => {
-  const { user, courses, getCourseProgress, deleteNote } = useAuth();
+  const { user, courses, getCourseProgress, deleteNote, openAuthModal } = useAuth();
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto py-16 px-4 text-center space-y-6">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-inner">
+          <GraduationCap className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+            لوحة التعلّم ومتابعة المسار
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            سجّل الدخول بحسابك لمتابعة تقدمك في الدورات، مراجعة ملاحظاتك، وتحميل شهاداتك المعتمدة.
+          </p>
+        </div>
+        <button
+          onClick={openAuthModal}
+          className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-md transition-all inline-flex items-center gap-2"
+        >
+          <GraduationCap className="w-4 h-4" />
+          <span>تسجيل الدخول للمنصة</span>
+        </button>
+      </div>
+    );
+  }
 
   const enrolledCourses = courses.filter(c => user.enrolledCourseIds.includes(c.id));
   const userNotes: Note[] = JSON.parse(localStorage.getItem('taallam_notes') || '[]');
