@@ -24,13 +24,16 @@ import {
   Terminal,
   DollarSign,
   Check,
-  Lock
+  Lock,
+  PlusCircle,
+  Presentation
 } from 'lucide-react';
 
 interface CourseCatalogProps {
   onSelectCourse: (course: Course) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  onNavigateToStudio?: () => void;
 }
 
 const CATEGORIES: { id: CourseCategory | 'all'; name: string; icon: any }[] = [
@@ -47,6 +50,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   onSelectCourse,
   searchQuery,
   setSearchQuery,
+  onNavigateToStudio,
 }) => {
   const { courses, user, getCourseProgress, enrollInCourse } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState<CourseCategory | 'all'>('all');
@@ -266,25 +270,51 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
 
       {/* Courses Grid */}
       {filteredCourses.length === 0 ? (
-        <div className="text-center py-16 bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-8">
-          <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
-            لم يتم العثور على دورات مطابقة للبحث
-          </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            جرب تغيير كلمات البحث أو اختيار مسار تعليمي آخر
-          </p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setSelectedCategory('all');
-              setSelectedLevel('all');
-              setPricingFilter('all');
-            }}
-            className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow transition-colors"
-          >
-            إعادة ضبط الفلاتر
-          </button>
+        <div className="text-center py-16 bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 space-y-4">
+          <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+            <BookOpen className="w-8 h-8" />
+          </div>
+          {courses.length === 0 ? (
+            <div className="max-w-md mx-auto space-y-2">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                المنصة فارغة تماماً وجاهزة لإضافة الدورات
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                لم يقم المعلمون بنشر أي دورات بعد. كمعلم أو مدرب، يمكنك الدخول إلى استوديو المعلم ورفع فيديوهات الشرح، إرفاق ملفات الـ PDF مع العرض المباشر، وبناء الاختبارات.
+              </p>
+              {onNavigateToStudio && (
+                <div className="pt-2">
+                  <button
+                    onClick={onNavigateToStudio}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all inline-flex items-center gap-2"
+                  >
+                    <Presentation className="w-4 h-4" />
+                    <span>الانتقال لاستوديو المعلم ونشر دورة</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
+                لم يتم العثور على دورات مطابقة للبحث
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                جرب تغيير كلمات البحث أو اختيار مسار تعليمي آخر
+              </p>
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('all');
+                  setSelectedLevel('all');
+                  setPricingFilter('all');
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow transition-colors"
+              >
+                إعادة ضبط الفلاتر
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

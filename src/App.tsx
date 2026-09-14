@@ -10,6 +10,7 @@ import { ForumView } from './components/ForumView';
 import { MessagesRepository } from './components/MessagesRepository';
 import { GoogleAuthModal } from './components/GoogleAuthModal';
 import { CertificateModal } from './components/CertificateModal';
+import { AdminPanel } from './components/AdminPanel';
 import { Course, Certificate } from './types';
 import { 
   GraduationCap, 
@@ -22,12 +23,13 @@ import {
   Globe,
   ShieldCheck,
   MessageSquare,
-  Mail
+  Mail,
+  Crown
 } from 'lucide-react';
 
 function LMSContent() {
   const { isAuthenticated, openAuthModal, unreadMessagesCount } = useAuth();
-  const [currentView, setCurrentView] = useState<'catalog' | 'dashboard' | 'studio' | 'player' | 'certificates' | 'forum' | 'messages'>('catalog');
+  const [currentView, setCurrentView] = useState<'catalog' | 'dashboard' | 'studio' | 'player' | 'certificates' | 'forum' | 'messages' | 'admin'>('catalog');
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,6 +70,7 @@ function LMSContent() {
             onSelectCourse={handleSelectCourse}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
+            onNavigateToStudio={() => setCurrentView('studio')}
           />
         )}
 
@@ -110,6 +113,12 @@ function LMSContent() {
           <CertificatesGallery
             onViewCertificate={handleViewCertificate}
             onExploreCourses={() => setCurrentView('catalog')}
+          />
+        )}
+
+        {currentView === 'admin' && (
+          <AdminPanel
+            onBackToCatalog={handleBackToCatalog}
           />
         )}
       </main>

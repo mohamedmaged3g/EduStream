@@ -101,11 +101,11 @@ export const GoogleAuthModal: React.FC = () => {
                 type="button"
                 disabled={isLoading}
                 onClick={() => handleQuickLogin('mohamedmaged3g@gmail.com', 'محمد ماجد')}
-                className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-xl shadow-sm hover:shadow-md transition-all group text-right"
+                className="w-full flex items-center justify-between p-3.5 bg-rose-50/60 dark:bg-rose-950/30 border-2 border-rose-200 dark:border-rose-900/60 hover:border-rose-500 rounded-xl shadow-sm hover:shadow-md transition-all group text-right"
               >
                 <div className="flex items-center gap-3">
                   {/* Google Icon SVG */}
-                  <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-800">
+                  <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 flex items-center justify-center shrink-0 border border-rose-200 dark:border-rose-800 shadow-sm">
                     <svg className="w-5 h-5" viewBox="0 0 24 24">
                       <path
                         fill="#4285F4"
@@ -126,15 +126,18 @@ export const GoogleAuthModal: React.FC = () => {
                     </svg>
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                      المتابعة بحساب Google
+                    <div className="text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors flex items-center gap-1.5">
+                      <span>دخول المدير العام والمالك</span>
+                      <span className="px-1.5 py-0.2 rounded bg-rose-200 dark:bg-rose-900 text-rose-800 dark:text-rose-200 text-[10px] font-black">
+                        المدير الرئيسي
+                      </span>
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    <div className="text-xs text-rose-700 dark:text-rose-300 font-mono font-semibold">
                       mohamedmaged3g@gmail.com
                     </div>
                   </div>
                 </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transform -rotate-180 group-hover:-translate-x-1 transition-all" />
+                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-rose-500 transform -rotate-180 group-hover:-translate-x-1 transition-all" />
               </button>
 
               {/* Enter Custom Gmail Option */}

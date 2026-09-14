@@ -36,7 +36,10 @@ import {
   ChevronUp,
   Clock,
   CheckCircle2,
-  X
+  X,
+  Lock,
+  Send,
+  AlertTriangle
 } from 'lucide-react';
 import { DocumentViewerModal } from './DocumentViewerModal';
 
@@ -51,9 +54,34 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
   onCourseCreated,
   onOpenMessages,
 }) => {
-  const { user, courses, createNewCourse } = useAuth();
+  const { user, courses, createNewCourse, deleteCourse, clearAllCourses, requestInstructorUpgrade, roleRequests } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
   const [activeStudioTab, setActiveStudioTab] = useState<'courses' | 'quick_upload' | 'exam_builder'>('courses');
+  const [upgradeReason, setUpgradeReason] = useState('');
+  const [upgradeSent, setUpgradeSent] = useState(false);
+
+  // Check if current user has an existing role request
+  const myExistingRequest = roleRequests.find(r => r.userId === user?.id || r.userEmail === user?.email);
+  const isInstructorOrAdmin = user?.role === 'instructor' || user?.role === 'admin' || user?.email === 'mohamedmaged3g@gmail.com';
+
+  // Calculate actual dynamic totals
+  const totalPdfFiles = courses.reduce((acc, c) => {
+    let count = 0;
+    c.sections?.forEach(s => s.lessons?.forEach(l => {
+      count += (l.resources?.filter(r => r.type === 'pdf')?.length || 0);
+    }));
+    return acc + count;
+  }, 0);
+
+  const totalQuizzes = courses.reduce((acc, c) => {
+    let count = c.finalExam ? 1 : 0;
+    c.sections?.forEach(s => s.lessons?.forEach(l => {
+      if (l.quiz && l.quiz.questions?.length > 0) count++;
+    }));
+    return acc + count;
+  }, 0);
+
+  const totalStudentsEnrolled = courses.reduce((acc, c) => acc + (c.studentsCount || 0), 0);
 
   // Preview resource modal
   const [previewResource, setPreviewResource] = useState<Resource | null>(null);
@@ -334,6 +362,101 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
     onCourseCreated(newCourse);
   };
 
+  // If user is logged in as a student (not instructor or admin or super admin), show an upgrade request panel
+  if (user && !isInstructorOrAdmin) {
+    return (
+      <div className="max-w-3xl mx-auto py-12 px-4 space-y-8">
+        <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 text-center shadow-lg space-y-6">
+          <div className="w-20 h-20 mx-auto rounded-3xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-inner">
+            <Lock className="w-10 h-10" />
+          </div>
+
+          <div className="space-y-2">
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+              صلاحية خاصة بالمعلمين والمديرين
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+              ترقية الحساب إلى رتبة معلّم / مدرب
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-lg mx-auto leading-relaxed">
+              أهلاً بك <strong className="text-slate-700 dark:text-slate-200">{user.name}</strong>. حسابك الحالي مسجل بصلاحية <strong>طالب</strong>. يتطلب استوديو إنشاء الدورات ورفع الفيديوهات والشروحات موافقة الإدارة العامة برئاسة الأستاذ محمد ماجد (<span className="text-indigo-600 dark:text-indigo-400 font-mono text-xs">mohamedmaged3g@gmail.com</span>).
+            </p>
+          </div>
+
+          {upgradeSent || (myExistingRequest && myExistingRequest.status === 'pending') ? (
+            <div className="p-6 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-right space-y-2">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-bold">
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                <span>تم إرسال طلب الترقية بنجاح إلى الإدارة</span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                طلبك الآن قيد المراجعة لدى المدير الرئيسي (<span className="font-mono text-indigo-600">mohamedmaged3g@gmail.com</span>). بمجرد موافقته، سيتحول حسابك تلقائياً إلى معلّم وستتمكن من نشر الدورات ورفع الفيديوهات وملفات الـ PDF.
+              </p>
+            </div>
+          ) : myExistingRequest && myExistingRequest.status === 'rejected' ? (
+            <div className="p-6 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-right space-y-3">
+              <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-bold">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <span>تم رفض طلب الترقية السابق</span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                يمكنك إعادة تقديم طلب جديد موضحاً فيه خبراتك والمواد التي ترغب في تدريسها.
+              </p>
+              <textarea
+                value={upgradeReason}
+                onChange={e => setUpgradeReason(e.target.value)}
+                placeholder="اكتب نبذة عن تخصصك وخبرتك ولماذا ترغب في الانضمام كمعلم..."
+                rows={3}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                onClick={() => {
+                  requestInstructorUpgrade(upgradeReason || 'طلب انضمام جديد كمعلم');
+                  setUpgradeSent(true);
+                }}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm flex items-center gap-2 active:scale-95 transition-transform"
+              >
+                <Send className="w-4 h-4" />
+                <span>إعادة إرسال طلب الترقية للمدير العام</span>
+              </button>
+            </div>
+          ) : (
+            <div className="bg-slate-50 dark:bg-slate-900/60 p-6 rounded-2xl border border-slate-200 dark:border-slate-700/60 text-right space-y-4">
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
+                نبذة عن خبرتك البرمجية والدورات التي تود تقديمها:
+              </label>
+              <textarea
+                value={upgradeReason}
+                onChange={e => setUpgradeReason(e.target.value)}
+                placeholder="مثال: مبرمج Full-Stack بخبرة 5 سنوات، أود تقديم مسار عملي في React و Node.js..."
+                rows={4}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <div className="flex items-center justify-between gap-4 pt-2">
+                <button
+                  onClick={onBack}
+                  className="px-5 py-2.5 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  العودة للمنصة
+                </button>
+                <button
+                  onClick={() => {
+                    requestInstructorUpgrade(upgradeReason || 'أرغب في الانضمام كمعلم ومشاركة الدورات');
+                    setUpgradeSent(true);
+                  }}
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>تقديم طلب الترقية للمدير mohamedmaged3g@gmail.com</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-16">
       {/* Header & Metrics */}
@@ -379,8 +502,8 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
             <span className="text-xs font-bold">إجمالي الطلاب</span>
             <Users className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white">12,450</div>
-          <div className="text-[10px] text-emerald-600 font-bold mt-1">تفاعل نشط</div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white">{totalStudentsEnrolled.toLocaleString('ar-EG')}</div>
+          <div className="text-[10px] text-emerald-600 font-bold mt-1">طالب مسجل</div>
         </div>
 
         <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -397,7 +520,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
             <span className="text-xs font-bold">ملفات الشرح PDF</span>
             <FileText className="w-4 h-4 text-rose-500" />
           </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white">48 ملف</div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white">{totalPdfFiles} ملف</div>
           <div className="text-[10px] text-rose-600 font-bold mt-1">عرض وتنزيل مباشر</div>
         </div>
 
@@ -406,7 +529,7 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
             <span className="text-xs font-bold">الاختبارات التفاعلية</span>
             <HelpCircle className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white">64 اختبار</div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white">{totalQuizzes} اختبار</div>
           <div className="text-[10px] text-amber-600 font-bold mt-1">تقييم تلقائي فوري</div>
         </div>
       </div>
@@ -1025,58 +1148,113 @@ export const InstructorStudio: React.FC<InstructorStudioProps> = ({
         /* Instructor Courses List */
         <div className="space-y-6">
           <div className="p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                الدورات التدريبية المتاحة تحت إشرافك ({courses.length})
-              </h3>
-              <button
-                onClick={() => setIsCreating(true)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>إضافة دورة</span>
-              </button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  الدورات التدريبية المتاحة تحت إشرافك ({courses.length})
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  المنصة جاهزة تماماً لإضافة دوراتك الجديدة وتضمين فيديوهات الشرح وملفات PDF والاختبارات
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {courses.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('هل أنت متأكد من رغبتك في مسح كافة الدورات من المنصة؟')) {
+                        clearAllCourses();
+                      }
+                    }}
+                    className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>تفريغ كل الدورات</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsCreating(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>إضافة دورة جديدة</span>
+                </button>
+              </div>
             </div>
 
-            <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {courses.map(course => (
-                <div key={course.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3.5">
-                    <img
-                      src={course.thumbnail}
-                      alt={course.title}
-                      className="w-16 h-12 object-cover rounded-xl shrink-0"
-                    />
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
-                        {course.title}
-                      </h4>
-                      <div className="text-xs text-slate-500 flex items-center gap-3 mt-1">
-                        <span>{course.categoryNameAr}</span>
-                        <span>•</span>
-                        <span>{course.durationHours} ساعة</span>
-                        <span>•</span>
-                        <span>{course.lessonsCount} درس</span>
-                        <span>•</span>
-                        <span>{course.studentsCount} طالب</span>
+            {courses.length === 0 ? (
+              <div className="text-center py-16 px-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 space-y-3">
+                <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                  <BookOpen className="w-7 h-7" />
+                </div>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                  لا توجد أي دورات تدريبية حالياً (البرنامج فارغ تماماً)
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  المنصة فارغة تماماً وجاهزة لاستقبال محتواك التعليمي الخاص. يمكنك الآن البدء بإنشاء دورتك الأولى ورفع فيديوهات الشرح، وإرفاق ملفات الـ PDF مع العرض المباشر للطلاب، وبناء الاختبارات.
+                </p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => setIsCreating(true)}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all inline-flex items-center gap-2"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>إنشاء أول دورة تدريبية الآن</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                {courses.map(course => (
+                  <div key={course.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <img
+                        src={course.thumbnail}
+                        alt={course.title}
+                        className="w-16 h-12 object-cover rounded-xl shrink-0"
+                      />
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
+                          {course.title}
+                        </h4>
+                        <div className="text-xs text-slate-500 flex items-center gap-3 mt-1">
+                          <span>{course.categoryNameAr}</span>
+                          <span>•</span>
+                          <span>{course.durationHours} ساعة</span>
+                          <span>•</span>
+                          <span>{course.lessonsCount} درس</span>
+                          <span>•</span>
+                          <span>{course.studentsCount} طالب</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    {course.finalExam && (
-                      <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 text-xs font-bold flex items-center gap-1">
-                        <Award className="w-3 h-3 text-amber-500" />
-                        <span>اختبار نهائي وشهادة</span>
+                    <div className="flex items-center gap-2">
+                      {course.finalExam && (
+                        <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 text-xs font-bold flex items-center gap-1">
+                          <Award className="w-3 h-3 text-amber-500" />
+                          <span>اختبار نهائي وشهادة</span>
+                        </span>
+                      )}
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-bold">
+                        منشورة ومتاحة
                       </span>
-                    )}
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-bold">
-                      منشورة ومتاحة
-                    </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`هل أنت متأكد من حذف دورة "${course.title}"؟`)) {
+                            deleteCourse(course.id);
+                          }
+                        }}
+                        className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                        title="حذف الدورة"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,11 +1,27 @@
 export type UserRole = 'student' | 'instructor' | 'admin';
 
+export interface RoleRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userAvatar: string;
+  currentRole?: UserRole;
+  requestedRole: 'instructor';
+  status: 'pending' | 'approved' | 'rejected';
+  reason: string;
+  createdAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   avatar: string;
   role: UserRole;
+  isSuperAdmin?: boolean;
   xp: number;
   streakDays: number;
   enrolledCourseIds: string[];
@@ -62,7 +78,7 @@ export interface Resource {
   uploadedAt?: string;
 }
 
-export type MessageRecipientType = 'individual' | 'course_broadcast' | 'all_students';
+export type MessageRecipientType = 'individual' | 'student' | 'course_broadcast' | 'all_students';
 
 export interface MessageReply {
   id: string;

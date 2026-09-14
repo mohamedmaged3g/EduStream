@@ -15,12 +15,13 @@ import {
   Presentation,
   MessageSquare,
   Mail,
-  ShieldAlert
+  ShieldAlert,
+  Crown
 } from 'lucide-react';
 
 interface NavbarProps {
-  currentView: 'catalog' | 'dashboard' | 'studio' | 'player' | 'certificates' | 'forum' | 'messages';
-  setCurrentView: (view: 'catalog' | 'dashboard' | 'studio' | 'certificates' | 'forum' | 'messages') => void;
+  currentView: 'catalog' | 'dashboard' | 'studio' | 'player' | 'certificates' | 'forum' | 'messages' | 'admin';
+  setCurrentView: (view: 'catalog' | 'dashboard' | 'studio' | 'certificates' | 'forum' | 'messages' | 'admin') => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
 }
@@ -31,8 +32,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery,
   setSearchQuery,
 }) => {
-  const { user, isAuthenticated, logout, openAuthModal, theme, toggleTheme, switchRole, discussions, unreadMessagesCount, messages } = useAuth();
+  const { user, isAuthenticated, isSuperAdmin, logout, openAuthModal, theme, toggleTheme, switchRole, discussions, unreadMessagesCount, messages, roleRequests } = useAuth();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const pendingRoleRequests = roleRequests.filter(r => r.status === 'pending');
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 transition-colors">
@@ -142,6 +144,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Presentation className="w-4 h-4 text-indigo-500" />
                 <span>استوديو المعلم</span>
               </button>
+
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setCurrentView('admin')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                    currentView === 'admin'
+                      ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500/40'
+                      : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+                  }`}
+                  title="لوحة المدير الرئيسي وإدارة الصلاحيات"
+                >
+                  <Crown className="w-4 h-4 text-rose-500" />
+                  <span>لوحة المدير</span>
+                  {pendingRoleRequests.length > 0 && (
+                    <span className="w-5 h-5 flex items-center justify-center rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse">
+                      {pendingRoleRequests.length}
+                    </span>
+                  )}
+                </button>
+              )}
 
               <button
                 onClick={() => {
@@ -322,6 +344,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <Presentation className="w-4 h-4 text-indigo-500" />
                           <span>استوديو إنشاء الدورات</span>
                         </button>
+
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => {
+                              setCurrentView('admin');
+                              setIsProfileMenuOpen(false);
+                            }}
+                            className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-rose-600 dark:text-rose-400 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <Crown className="w-4 h-4 text-rose-500" />
+                              <span>لوحة تحكم المدير العام</span>
+                            </div>
+                            {pendingRoleRequests.length > 0 && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black">
+                                {pendingRoleRequests.length} طلبات
+                              </span>
+                            )}
+                          </button>
+                        )}
                       </div>
 
                       {/* Switch Role */}

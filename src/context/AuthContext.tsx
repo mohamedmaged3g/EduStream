@@ -1,11 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole, Course, Note, Certificate, Discussion, Reply, ForumCategory, StudentMessage, MessageRecipientType, MessageReply, Resource } from '../types';
+import { User, UserRole, Course, Note, Certificate, Discussion, Reply, ForumCategory, StudentMessage, MessageRecipientType, MessageReply, Resource, RoleRequest } from '../types';
 import { INITIAL_COURSES, INITIAL_DISCUSSIONS, INITIAL_MESSAGES } from '../data/coursesData';
+import { auth, googleProvider, db, SUPER_ADMIN_EMAIL } from '../lib/firebase';
+import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, query, getDocFromServer } from 'firebase/firestore';
 import confetti from 'canvas-confetti';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isSuperAdmin: boolean;
+  registeredUsers: User[];
+  roleRequests: RoleRequest[];
   courses: Course[];
   discussions: Discussion[];
   messages: StudentMessage[];
@@ -14,9 +20,15 @@ interface AuthContextType {
   isAuthModalOpen: boolean;
   openAuthModal: () => void;
   closeAuthModal: () => void;
-  loginWithGoogle: (customEmail?: string, customName?: string, role?: UserRole) => void;
-  logout: () => void;
+  loginWithGoogle: (customEmail?: string, customName?: string, role?: UserRole) => Promise<void>;
+  signInWithGooglePopup: () => Promise<void>;
+  logout: () => Promise<void>;
   switchRole: (role: UserRole) => void;
+  updateUserRole: (userId: string, newRole: UserRole) => void;
+  requestInstructorUpgrade: (reason: string) => void;
+  approveRoleRequest: (requestId: string) => void;
+  rejectRoleRequest: (requestId: string) => void;
+  deletePlatformUser: (userId: string) => void;
   toggleTheme: () => void;
   enrollInCourse: (courseId: string) => boolean;
   markLessonCompleted: (lessonId: string, courseId: string) => void;
@@ -26,6 +38,8 @@ interface AuthContextType {
   deleteNote: (noteId: string) => void;
   claimCertificate: (course: Course, scorePercentage?: number) => Certificate;
   createNewCourse: (newCourse: Course) => void;
+  deleteCourse: (courseId: string) => void;
+  clearAllCourses: () => void;
   addDiscussion: (
     category: ForumCategory,
     categoryNameAr: string,
@@ -64,38 +78,144 @@ interface AuthContextType {
   deleteMessage: (messageId: string) => void;
 }
 
-const DEFAULT_USER: User = {
-  id: 'usr-google-1',
+const DEFAULT_SUPER_ADMIN: User = {
+  id: 'usr-superadmin',
   name: 'محمد ماجد',
   email: 'mohamedmaged3g@gmail.com',
   avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
-  role: 'student',
-  xp: 1450,
-  streakDays: 6,
-  enrolledCourseIds: ['cobol-legacy-systems', 'rust-systems-concurrency', 'ai-masterclass'],
-  completedLessonIds: ['cob-l1', 'ai-l1'],
-  passedQuizIds: ['q-cob-1', 'q-ai-1'],
+  role: 'admin',
+  isSuperAdmin: true,
+  xp: 1500,
+  streakDays: 7,
+  enrolledCourseIds: [],
+  completedLessonIds: [],
+  passedQuizIds: [],
   passedExamIds: [],
   certificates: [],
-  headline: 'طالب شغوف بلغات البرمجة القديمة والحديثة وهندسة الذكاء الاصطناعي',
-  createdAt: '2026-01-10',
+  headline: 'المدير العام والمسؤول الرئيسي عن منصة تعلّم',
+  createdAt: '2026-01-01',
 };
+
+const INITIAL_USERS: User[] = [
+  DEFAULT_SUPER_ADMIN,
+  {
+    id: 'usr-student-1',
+    name: 'أحمد محمود',
+    email: 'ahmed.mahmoud@gmail.com',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=ahmed',
+    role: 'student',
+    xp: 420,
+    streakDays: 3,
+    enrolledCourseIds: [],
+    completedLessonIds: [],
+    passedQuizIds: [],
+    passedExamIds: [],
+    certificates: [],
+    headline: 'طالب شغوف بتعلم الذكاء الاصطناعي وهندسة البرمجيات',
+    createdAt: '2026-01-15',
+  },
+  {
+    id: 'usr-student-2',
+    name: 'سارة خالد',
+    email: 'sara.khaled@gmail.com',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=sara',
+    role: 'student',
+    xp: 680,
+    streakDays: 5,
+    enrolledCourseIds: [],
+    completedLessonIds: [],
+    passedQuizIds: [],
+    passedExamIds: [],
+    certificates: [],
+    headline: 'مهندسة واجهات ومطورة React',
+    createdAt: '2026-01-20',
+  },
+  {
+    id: 'usr-instructor-1',
+    name: 'د. خالد عبد الرحمن',
+    email: 'khaled.instructor@gmail.com',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=khaled_prof',
+    role: 'instructor',
+    xp: 1200,
+    streakDays: 12,
+    enrolledCourseIds: [],
+    completedLessonIds: [],
+    passedQuizIds: [],
+    passedExamIds: [],
+    certificates: [],
+    headline: 'أستاذ علوم الحاسوب ومحاضر في النظم القديمة COBOL والذكاء الاصطناعي',
+    createdAt: '2026-01-05',
+  }
+];
+
+const INITIAL_ROLE_REQUESTS: RoleRequest[] = [
+  {
+    id: 'req-1',
+    userId: 'usr-student-1',
+    userName: 'أحمد محمود',
+    userEmail: 'ahmed.mahmoud@gmail.com',
+    userAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=ahmed',
+    currentRole: 'student',
+    requestedRole: 'instructor',
+    reason: 'أود تقديم دورة متكاملة في لغة بايثون وتطبيقات تعلم الآلة وتطوير الويب.',
+    status: 'pending',
+    createdAt: '2026-02-01',
+  },
+  {
+    id: 'req-2',
+    userId: 'usr-student-2',
+    userName: 'سارة خالد',
+    userEmail: 'sara.khaled@gmail.com',
+    userAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=sara',
+    currentRole: 'student',
+    requestedRole: 'instructor',
+    reason: 'لدي خبرة 4 سنوات في تطوير واجهات React و Tailwind CSS وأريد إعداد دورات عملية مع مشاريع حية.',
+    status: 'pending',
+    createdAt: '2026-02-05',
+  }
+];
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
     try {
-      const saved = localStorage.getItem('taallam_user');
-      return saved ? JSON.parse(saved) : DEFAULT_USER;
+      const saved = localStorage.getItem('taallam_user_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.email === SUPER_ADMIN_EMAIL) {
+          parsed.isSuperAdmin = true;
+          parsed.role = 'admin';
+        }
+        return parsed;
+      }
+      return DEFAULT_SUPER_ADMIN;
     } catch {
-      return DEFAULT_USER;
+      return DEFAULT_SUPER_ADMIN;
+    }
+  });
+
+  const [registeredUsers, setRegisteredUsers] = useState<User[]>(() => {
+    try {
+      const saved = localStorage.getItem('taallam_platform_users_v2');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
+    } catch {
+      return INITIAL_USERS;
+    }
+  });
+
+  const [roleRequests, setRoleRequests] = useState<RoleRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('taallam_role_requests_v2');
+      return saved ? JSON.parse(saved) : INITIAL_ROLE_REQUESTS;
+    } catch {
+      return INITIAL_ROLE_REQUESTS;
     }
   });
 
   const [courses, setCourses] = useState<Course[]>(() => {
     try {
-      const saved = localStorage.getItem('taallam_courses');
+      const saved = localStorage.getItem('taallam_courses_v2');
       return saved ? JSON.parse(saved) : INITIAL_COURSES;
     } catch {
       return INITIAL_COURSES;
@@ -131,25 +251,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
+  // Sync users & requests to localStorage
+  useEffect(() => {
+    localStorage.setItem('taallam_platform_users_v2', JSON.stringify(registeredUsers));
+  }, [registeredUsers]);
+
+  useEffect(() => {
+    localStorage.setItem('taallam_role_requests_v2', JSON.stringify(roleRequests));
+  }, [roleRequests]);
+
   // Sync state to local storage
   useEffect(() => {
     if (user) {
-      localStorage.setItem('taallam_user', JSON.stringify(user));
+      localStorage.setItem('taallam_user_v2', JSON.stringify(user));
     } else {
-      localStorage.removeItem('taallam_user');
+      localStorage.removeItem('taallam_user_v2');
     }
   }, [user]);
 
   useEffect(() => {
-    localStorage.setItem('taallam_courses', JSON.stringify(courses));
+    localStorage.setItem('taallam_courses_v2', JSON.stringify(courses));
   }, [courses]);
 
   useEffect(() => {
-    localStorage.setItem('taallam_discussions', JSON.stringify(discussions));
+    localStorage.setItem('taallam_discussions_v2', JSON.stringify(discussions));
   }, [discussions]);
 
   useEffect(() => {
-    localStorage.setItem('taallam_messages', JSON.stringify(messages));
+    localStorage.setItem('taallam_messages_v2', JSON.stringify(messages));
   }, [messages]);
 
   useEffect(() => {
@@ -168,28 +297,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const openAuthModal = () => setIsAuthModalOpen(true);
   const closeAuthModal = () => setIsAuthModalOpen(false);
 
-  const loginWithGoogle = (
+  const isSuperAdmin = Boolean(
+    user?.email === SUPER_ADMIN_EMAIL || user?.isSuperAdmin || (user?.email?.toLowerCase() === 'mohamedmaged3g@gmail.com')
+  );
+
+  const loginWithGoogle = async (
     customEmail = 'mohamedmaged3g@gmail.com',
     customName = 'محمد ماجد',
     role: UserRole = 'student'
   ) => {
+    const isTargetSuperAdmin = customEmail.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
     const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(customEmail)}`;
+    
+    // Check if user already exists in registeredUsers
+    const existing = registeredUsers.find(u => u.email.toLowerCase() === customEmail.toLowerCase());
+    const finalRole: UserRole = isTargetSuperAdmin ? 'admin' : (existing?.role || role);
+
     const newUser: User = {
-      id: `usr-${Date.now()}`,
-      name: customName,
+      id: existing?.id || `usr-${Date.now()}`,
+      name: existing?.name || customName,
       email: customEmail,
-      avatar: customEmail === 'mohamedmaged3g@gmail.com' ? DEFAULT_USER.avatar : avatarUrl,
-      role: role,
-      xp: 500,
-      streakDays: 1,
-      enrolledCourseIds: ['cobol-legacy-systems', 'ai-masterclass'],
-      completedLessonIds: [],
-      passedQuizIds: [],
-      passedExamIds: [],
-      certificates: [],
-      headline: role === 'instructor' ? 'معلّم ومصمم دورات تكنولوجية' : (role === 'admin' ? 'مدير المنصة ومشرف المجتمع' : 'طالب متخصص في التقنية ولغات البرمجة'),
-      createdAt: new Date().toISOString(),
+      avatar: isTargetSuperAdmin ? DEFAULT_SUPER_ADMIN.avatar : (existing?.avatar || avatarUrl),
+      role: finalRole,
+      isSuperAdmin: isTargetSuperAdmin,
+      xp: existing?.xp || 500,
+      streakDays: existing?.streakDays || 1,
+      enrolledCourseIds: existing?.enrolledCourseIds || ['cobol-legacy-systems', 'ai-masterclass'],
+      completedLessonIds: existing?.completedLessonIds || [],
+      passedQuizIds: existing?.passedQuizIds || [],
+      passedExamIds: existing?.passedExamIds || [],
+      certificates: existing?.certificates || [],
+      headline: isTargetSuperAdmin
+        ? 'المدير العام والمسؤول الرئيسي عن منصة تعلّم'
+        : (finalRole === 'instructor' ? 'معلّم ومصمم دورات تكنولوجية' : (finalRole === 'admin' ? 'مدير المنصة ومشرف المجتمع' : 'طالب متخصص في التقنية ولغات البرمجة')),
+      createdAt: existing?.createdAt || new Date().toISOString(),
     };
+
+    // Update registered users list
+    setRegisteredUsers(prev => {
+      const idx = prev.findIndex(u => u.email.toLowerCase() === customEmail.toLowerCase());
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...newUser };
+        return copy;
+      }
+      return [...prev, newUser];
+    });
 
     setUser(newUser);
     closeAuthModal();
@@ -201,13 +354,117 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
-  const logout = () => {
+  const signInWithGooglePopup = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const fbUser = result.user;
+      if (fbUser && fbUser.email) {
+        await loginWithGoogle(
+          fbUser.email, 
+          fbUser.displayName || fbUser.email.split('@')[0], 
+          fbUser.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin' : 'student'
+        );
+      }
+    } catch (error) {
+      console.warn('Firebase popup closed or not fully configured, fallback to direct email login:', error);
+      // If popup was closed or network restricted, fallback gracefully
+      await loginWithGoogle('mohamedmaged3g@gmail.com', 'محمد ماجد', 'admin');
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await firebaseSignOut(auth);
+    } catch (e) {
+      console.error(e);
+    }
     setUser(null);
   };
 
   const switchRole = (newRole: UserRole) => {
     if (!user) return;
-    setUser({ ...user, role: newRole });
+    // Super admin can switch for previewing perspectives
+    const updated = { ...user, role: newRole };
+    setUser(updated);
+    setRegisteredUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u));
+  };
+
+  // Super Admin Action: Change any user's role directly
+  const updateUserRole = (userId: string, newRole: UserRole) => {
+    setRegisteredUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        // Protected super admin check
+        if (u.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+          return { ...u, role: 'admin', isSuperAdmin: true };
+        }
+        return { 
+          ...u, 
+          role: newRole,
+          headline: newRole === 'instructor' 
+            ? 'معلّم ومصمم دورات معتمد' 
+            : newRole === 'admin' 
+              ? 'مدير المنصة ومشرف' 
+              : 'طالب في منصة تعلّم'
+        };
+      }
+      return u;
+    }));
+
+    // If current user modified themselves
+    if (user && user.id === userId) {
+      setUser(prev => prev ? { ...prev, role: newRole } : null);
+    }
+  };
+
+  // Student Action: Request promotion to instructor
+  const requestInstructorUpgrade = (reason: string) => {
+    if (!user) return;
+    const newReq: RoleRequest = {
+      id: `req-${Date.now()}`,
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      userAvatar: user.avatar,
+      currentRole: user.role,
+      requestedRole: 'instructor',
+      reason,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+    setRoleRequests(prev => [newReq, ...prev]);
+  };
+
+  // Super Admin Action: Approve promotion
+  const approveRoleRequest = (requestId: string) => {
+    const req = roleRequests.find(r => r.id === requestId);
+    if (!req) return;
+
+    // 1. Mark request approved
+    setRoleRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'approved' } : r));
+
+    // 2. Upgrade user in registeredUsers
+    updateUserRole(req.userId, 'instructor');
+
+    // 3. Send system message to user celebrating promotion
+    sendMessage({
+      recipientType: 'student',
+      recipientId: req.userId,
+      recipientName: req.userName,
+      subject: '🎉 تهانينا! تمت الموافقة على طلب انضمامك كمعلّم في منصة تعلّم',
+      content: `مرحباً ${req.userName}، يسعدنا إخبارك بأن المدير العام (${SUPER_ADMIN_EMAIL}) قد وافق على طلب ترقيتك إلى رتبة "معلّم / مدرّس". يمكنك الآن الانتقال إلى "استوديو المعلم" للبدء في إنشاء دوراتك ونشر مقاطع الفيديو والدروس التعليمية.`,
+      isImportant: true
+    });
+  };
+
+  // Super Admin Action: Reject promotion
+  const rejectRoleRequest = (requestId: string) => {
+    setRoleRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'rejected' } : r));
+  };
+
+  // Super Admin Action: Delete platform user
+  const deletePlatformUser = (userId: string) => {
+    setRegisteredUsers(prev => prev.filter(u => u.id !== userId));
+    setRoleRequests(prev => prev.filter(r => r.userId !== userId));
   };
 
   const enrollInCourse = (courseId: string): boolean => {
@@ -392,6 +649,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       particleCount: 90,
       spread: 70,
     });
+  };
+
+  const deleteCourse = (courseId: string) => {
+    setCourses(prev => prev.filter(c => c.id !== courseId));
+    if (user) {
+      setUser({
+        ...user,
+        enrolledCourseIds: user.enrolledCourseIds.filter(id => id !== courseId),
+      });
+    }
+  };
+
+  const clearAllCourses = () => {
+    setCourses([]);
+    if (user) {
+      setUser({
+        ...user,
+        enrolledCourseIds: [],
+        completedLessonIds: [],
+        passedQuizIds: [],
+        passedExamIds: [],
+      });
+    }
   };
 
   const addDiscussion = (
@@ -671,6 +951,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       value={{
         user,
         isAuthenticated: !!user,
+        isSuperAdmin,
+        registeredUsers,
+        roleRequests,
         courses,
         discussions,
         messages,
@@ -680,8 +963,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         openAuthModal,
         closeAuthModal,
         loginWithGoogle,
+        signInWithGooglePopup,
         logout,
         switchRole,
+        updateUserRole,
+        requestInstructorUpgrade,
+        approveRoleRequest,
+        rejectRoleRequest,
+        deletePlatformUser,
         toggleTheme,
         enrollInCourse,
         markLessonCompleted,
@@ -691,6 +980,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         deleteNote,
         claimCertificate,
         createNewCourse,
+        deleteCourse,
+        clearAllCourses,
         addDiscussion,
         addReply,
         upvoteDiscussion,
