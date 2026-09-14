@@ -1,0 +1,6 @@
+{
+  "name": "منصة تعلّم التعليمية | Taallam LMS",
+  "description": "منصة تعليمية متكاملة بتسجيل دخول بحساب جوجل وجيميل، دورات تفاعلية، مساعد ذكي بالذكاء الاصطناعي، اختبارات، واستوديو للمدربين وشهادات معتمدة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
