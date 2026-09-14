@@ -400,9 +400,7 @@ export const GoogleAuthModal: React.FC = () => {
                       {showAdminPasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                    * الرمز المبدئي الافتراضي: <span className="font-mono font-bold text-rose-500">Admin@2026</span> (ويمكنك تغييره في أي وقت من لوحة التحكم)
-                  </p>
+                 
                 </div>
 
                 <button
